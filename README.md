@@ -1,5 +1,5 @@
 <p align="left">
-  <img src="mmocr2.png" alt="mmocr_anonymizer banner" width="300"/>
+  <img src="mmocr3.png" alt="mmocr_anonymizer banner" width="300"/>
 </p>
 
 🩺 DICOM Text Masker – Automatic In-Burned Text Removal
