@@ -1,4 +1,4 @@
-![mmocr_anonymizer banner](mmocr1.png)
+![mmocr_anonymizer banner](mmocr1.PNG)
 
 
 🩺 DICOM Text Masker – Automatic In-Burned Text Removal
