@@ -2,13 +2,17 @@ import streamlit as st
 import numpy as np
 import cv2
 import pydicom
-import tempfile
-from mmocr.apis import MMOCR
 from io import BytesIO
+from mmocr.apis import MMOCR
 
-st.set_page_config(page_title="mmocr_anonymizer", layout="centered")
+st.set_page_config(page_title="mmocr_anonymizer", layout="wide")
 st.title("🩻 mmocr_anonymizer")
-st.caption("Automatic in-image anonymization of DICOM ultrasound files")
+st.caption("Automatic anonymization of burned-in text in DICOM ultrasound images")
+
+# --- Sidebar: settings ---
+st.sidebar.header("⚙️ Detection Settings")
+ocr_psm = st.sidebar.selectbox("OCR Mode (psm)", options=[6, 7, 11], index=0)
+show_boxes = st.sidebar.checkbox("Show bounding boxes", value=False)
 
 @st.cache_resource
 def load_ocr():
@@ -24,11 +28,14 @@ def dicom_to_image(dicom_bytes):
     img = cv2.normalize(img, None, 0, 255, cv2.NORM_MINMAX)
     return ds, img
 
-def mask_text(image, boxes):
+def mask_text(image, boxes, draw_boxes=False):
     masked = image.copy()
     for box in boxes:
         pts = np.array(box, dtype=np.int32)
-        cv2.fillPoly(masked, [pts], (0))
+        if draw_boxes:
+            cv2.polylines(masked, [pts], isClosed=True, color=(255,), thickness=2)
+        else:
+            cv2.fillPoly(masked, [pts], (0))
     return masked
 
 def save_masked_dicom(ds, masked_img):
@@ -37,27 +44,30 @@ def save_masked_dicom(ds, masked_img):
         ds.save_as(buffer)
         return buffer.getvalue()
 
-# --- GUI ---
+# --- Columns layout ---
+col1, col2 = st.columns(2, gap="medium")
 
-uploaded_file = st.file_uploader("📤 Upload a DICOM file", type=["dcm"])
+with col1:
+    st.subheader("📤 Original DICOM")
+    uploaded_file = st.file_uploader("Upload .dcm file", type=["dcm"])
+    if uploaded_file:
+        dicom_bytes = uploaded_file.read()
+        ds, img = dicom_to_image(dicom_bytes)
+        st.image(img, caption="Original Image", use_column_width=True, clamp=True)
 
-if uploaded_file:
-    dicom_bytes = uploaded_file.read()
-    ds, img = dicom_to_image(dicom_bytes)
-    st.image(img, caption="Original Image", use_column_width=True, clamp=True)
-
-    if st.button("🔍 Detect and Mask Text"):
-        st.info("Running MMOCR...")
+with col2:
+    st.subheader("🛡️ Anonymized Output")
+    if uploaded_file and st.button("🔍 Detect and Mask"):
+        st.info("Running detection...")
         ocr = load_ocr()
-        result = ocr.readtext(img)
+        result = ocr.readtext(img, details=True)
 
-        if result and "boundary_result" in result[0]:
-            boxes = result[0]["boundary_result"]
-            st.success(f"Detected {len(boxes)} regions")
-            masked_img = mask_text(img, boxes)
+        boxes = result[0]["boundary_result"] if result and "boundary_result" in result[0] else []
+        if boxes:
+            masked_img = mask_text(img, boxes, draw_boxes=show_boxes)
             st.image(masked_img, caption="Masked Image", use_column_width=True, clamp=True)
-
             masked_dicom_bytes = save_masked_dicom(ds, masked_img)
+
             st.download_button(
                 label="💾 Download Masked DICOM",
                 data=masked_dicom_bytes,
@@ -65,5 +75,5 @@ if uploaded_file:
                 mime="application/dicom"
             )
         else:
-            st.warning("No text regions detected.")
+            st.warning("No text detected.")
 
